@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/hardrockhodl/illuminet/internal/core/model"
 )
 
 func TestFake_CountersMonotonic(t *testing.T) {
@@ -68,8 +70,8 @@ func TestFake_SampleStructure(t *testing.T) {
 	if s.Device.Name != "fake-switch" {
 		t.Errorf("Device.Name: got %q, want fake-switch", s.Device.Name)
 	}
-	if s.Device.Vendor != "fake" {
-		t.Errorf("Device.Vendor: got %q, want fake", s.Device.Vendor)
+	if s.Device.Vendor != model.VendorFake {
+		t.Errorf("Device.Vendor: got %q, want VendorFake", s.Device.Vendor)
 	}
 	if s.Device.CPUKernel == nil {
 		t.Error("Device.CPUKernel: got nil")

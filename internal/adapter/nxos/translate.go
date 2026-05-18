@@ -78,7 +78,7 @@ func newTranslator(devCtx DeviceContext) *translator {
 			Name:         devCtx.Name,
 			ManagementIP: devCtx.ManagementIP,
 			Location:     devCtx.Location,
-			Vendor:       "cisco",
+			Vendor:       model.VendorCisco,
 		},
 		interfaces: make(map[string]*model.Interface),
 	}

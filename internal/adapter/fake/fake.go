@@ -138,7 +138,7 @@ func (f *fake) buildSample(now time.Time, cpuKernel, cpuUser float64) *model.Sam
 		Device: model.Device{
 			Name:         "fake-switch",
 			ManagementIP: "10.0.0.1",
-			Vendor:       "fake",
+			Vendor:       model.VendorFake,
 			Model:        "FAKE-9000",
 			OSVersion:    "1.0.0",
 			Role:         model.DeviceRoleLeaf,

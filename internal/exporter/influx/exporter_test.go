@@ -60,7 +60,7 @@ func TestExporter_MinimalSample_ExactOutput(t *testing.T) {
 	}
 
 	nano := ts.UnixNano()
-	want := fmt.Sprintf("device,host=leaf-01,location=rack-A,role=unknown model=\"TestModel\" %d\n", nano) +
+	want := fmt.Sprintf("device,host=leaf-01,location=rack-A,role=unknown,vendor=unknown model=\"TestModel\" %d\n", nano) +
 		fmt.Sprintf("interface,admin_state=unknown,classification=unknown,host=leaf-01,interface=Ethernet1/1,oper_mode=unknown,oper_state=unknown rx_bytes=1000i %d\n", nano)
 
 	if buf.String() != want {
@@ -204,7 +204,7 @@ func TestExporter_ComplexSampleRoundtrip(t *testing.T) {
 		Device: model.Device{
 			Name:         "spine-1",
 			ManagementIP: "10.0.0.1",
-			Vendor:       "cisco",
+			Vendor:       model.VendorCisco,
 			Model:        "N9K-C9332D-GX2B",
 			OSVersion:    "10.5(1)",
 			Location:     "rack=A 1",

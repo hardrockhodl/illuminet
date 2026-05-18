@@ -2,6 +2,37 @@ package model
 
 import "time"
 
+// Vendor identifies the equipment manufacturer behind a Device.
+// Vendor strings are lowercase and short, suitable for use as
+// InfluxDB tag values without escaping.
+type Vendor string
+
+// Vendor enumeration values. The empty string is treated as Unknown so
+// that a zero-value Device naturally has an Unknown vendor.
+const (
+	// VendorUnknown indicates the manufacturer has not been
+	// determined.
+	VendorUnknown Vendor = ""
+	// VendorCisco is Cisco Systems.
+	VendorCisco Vendor = "cisco"
+	// VendorArista is Arista Networks.
+	VendorArista Vendor = "arista"
+	// VendorJuniper is Juniper Networks.
+	VendorJuniper Vendor = "juniper"
+	// VendorFake is the in-process fake adapter used for tests and
+	// demos; it is not a real manufacturer.
+	VendorFake Vendor = "fake"
+)
+
+// String returns the lowercase canonical form. The zero value renders
+// as "unknown".
+func (v Vendor) String() string {
+	if v == VendorUnknown {
+		return "unknown"
+	}
+	return string(v)
+}
+
 // DeviceRole is the operational role a Device plays in the fabric. The
 // zero value is DeviceRoleUnknown.
 type DeviceRole string
@@ -45,9 +76,9 @@ type Device struct {
 	// stable identifier downstream.
 	ManagementIP string
 
-	// Vendor is the lowercase vendor identifier, e.g. "cisco",
-	// "arista", "juniper". Adapters set this consistently.
-	Vendor string
+	// Vendor identifies the equipment manufacturer. Adapters set this
+	// consistently to one of the package-defined Vendor constants.
+	Vendor Vendor
 
 	// Model is the raw platform model string reported by the vendor,
 	// e.g. "N9K-C9332D-GX2B". Not normalized.

@@ -189,6 +189,25 @@ func hostFromAddress(addr string) string {
 // gnmi.Notification suitable for [Translate]; the deterministic key
 // ordering produced by snapshot makes the resulting Sample
 // reproducible for tests.
+//
+// The reason the adapter accumulates updates in a cache and emits
+// Samples on a wall-clock ticker, rather than using gNMI's
+// sync_response as the emission trigger, is that sync_response is
+// sent exactly once per subscription: after the target has flushed
+// the initial state dump. In STREAM SAMPLE mode all subsequent
+// notifications trickle in independently, with no end-of-batch
+// marker. We also subscribe to multiple paths whose servers may
+// honour different effective sample intervals — for example interface
+// counters every 10s alongside system metadata every 60s — and a
+// single emitted Sample must carry the most recent value for every
+// path regardless of which arrived last. Keeping per-path "latest
+// seen" state in the cache and snapshotting on our own clock solves
+// both problems.
+//
+// Other vendor adapters (Arista, Juniper) will almost certainly want
+// the same pattern. The cache is intentionally kept package-private
+// for now; if a second adapter duplicates it, lift it into the parent
+// internal/adapter package as a shared helper.
 type notificationCache struct {
 	mu       sync.Mutex
 	updates  map[string]*gnmi.Update

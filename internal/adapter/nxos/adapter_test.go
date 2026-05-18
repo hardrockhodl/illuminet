@@ -144,7 +144,7 @@ func TestAdapter_DeliversSample(t *testing.T) {
 	if s.Device.OSVersion != "10.5(1)" {
 		t.Errorf("Device.OSVersion: got %q, want 10.5(1)", s.Device.OSVersion)
 	}
-	if s.Device.Vendor != "cisco" {
+	if s.Device.Vendor != model.VendorCisco {
 		t.Errorf("Device.Vendor: got %q", s.Device.Vendor)
 	}
 	if s.Device.Location != "lab-rack-A" {

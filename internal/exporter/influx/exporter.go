@@ -93,7 +93,7 @@ func writeDevice(enc *Encoder, s *model.Sample) error {
 	enc.BeginLine(MeasurementDevice).
 		AddTag(TagHost, d.Name).
 		AddTag(TagLocation, d.Location).
-		AddTag(TagVendor, d.Vendor).
+		AddTag(TagVendor, d.Vendor.String()).
 		AddTag(TagRole, d.Role.String()).
 		AddStringField(FieldModel, d.Model).
 		AddStringField(FieldOSVersion, d.OSVersion).

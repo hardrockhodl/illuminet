@@ -40,7 +40,7 @@ func TestSample_MinimalRoundtrip(t *testing.T) {
 		Device: Device{
 			Name:         "leaf-01",
 			ManagementIP: "10.0.0.1",
-			Vendor:       "cisco",
+			Vendor:       VendorCisco,
 			Model:        "N9K-C9332D-GX2B",
 			OSVersion:    "10.5(1)",
 			Role:         DeviceRoleLeaf,

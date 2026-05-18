@@ -11,8 +11,8 @@ func TestDevice_ZeroValue(t *testing.T) {
 	if d.ManagementIP != "" {
 		t.Errorf("ManagementIP: got %q, want empty", d.ManagementIP)
 	}
-	if d.Vendor != "" {
-		t.Errorf("Vendor: got %q, want empty", d.Vendor)
+	if d.Vendor != VendorUnknown {
+		t.Errorf("Vendor: got %q, want VendorUnknown", d.Vendor)
 	}
 	if d.Model != "" {
 		t.Errorf("Model: got %q, want empty", d.Model)
@@ -43,6 +43,25 @@ func TestDevice_ZeroValue(t *testing.T) {
 	}
 	if d.ResponseTime != nil {
 		t.Errorf("ResponseTime: got non-nil, want nil")
+	}
+}
+
+func TestVendor_String(t *testing.T) {
+	tests := []struct {
+		vendor Vendor
+		want   string
+	}{
+		{VendorUnknown, "unknown"},
+		{VendorCisco, "cisco"},
+		{VendorArista, "arista"},
+		{VendorJuniper, "juniper"},
+		{VendorFake, "fake"},
+	}
+	for _, tc := range tests {
+		got := tc.vendor.String()
+		if got != tc.want {
+			t.Errorf("Vendor(%q).String() = %q, want %q", string(tc.vendor), got, tc.want)
+		}
 	}
 }
 

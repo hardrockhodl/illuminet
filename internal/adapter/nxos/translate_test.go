@@ -88,8 +88,8 @@ func TestTranslate_SystemAndInterfacesCombined(t *testing.T) {
 	if s.Device.OSVersion != "10.5(1)" {
 		t.Errorf("Device.OSVersion: got %q, want 10.5(1)", s.Device.OSVersion)
 	}
-	if s.Device.Vendor != "cisco" {
-		t.Errorf("Device.Vendor: got %q, want cisco", s.Device.Vendor)
+	if s.Device.Vendor != model.VendorCisco {
+		t.Errorf("Device.Vendor: got %q, want VendorCisco", s.Device.Vendor)
 	}
 	if s.Device.Location != "lab-rack-A" {
 		t.Errorf("Device.Location: got %q, want lab-rack-A", s.Device.Location)

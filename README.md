@@ -2,9 +2,6 @@
 
 Multi-vendor datacenter fabric observability.
 
-> **Status: early development.** APIs, the internal data model, and output
-> formats will change without notice until the v0.1.0 release.
-
 ## What it is
 
 IllumiNET is a Go collector that pulls operational telemetry from datacenter
@@ -15,13 +12,22 @@ InfluxDB outputs). The initial focus is RoCEv2 lossless fabrics, where the
 useful signal lives in per-priority PFC pauses, ECN markings, microburst
 peaks, and buffer occupancy rather than in aggregate interface counters.
 
-## What it isn't yet
+## Status
 
-Nothing collects anything yet. This repository currently contains only the
-project scaffold: a buildable `cmd/illuminet` skeleton with `version` and
-`collect` placeholders, package layout for the core pipeline, vendor adapters,
-and exporters, plus CI and tooling. The `collect` command exits non-zero with
-"not yet implemented".
+Early development. The collector runs end-to-end against a Cisco NX-OS
+gNMI target and emits InfluxDB Line Protocol on stdout, suitable for
+ingestion by Telegraf's `inputs.exec` plugin. Coverage so far:
+
+- NX-OS adapter: device metadata, interface counters (RxBytes, TxBytes,
+  unicast/multicast/broadcast packet counts, CRC errors), admin/oper
+  state, descriptions.
+- Fake adapter for testing without a switch.
+- InfluxDB Line Protocol exporter.
+
+Not yet implemented: queue counters, PFC, ECN, buffer state, microburst
+detection, LLDP topology enrichment, additional vendors. APIs, the
+internal data model, and output formats will change without notice
+until the v0.1.0 release.
 
 ## Architecture
 
