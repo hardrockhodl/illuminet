@@ -14,6 +14,14 @@ issues:
     - ".*_generated\\.go$"
   exclude-use-default: false
 
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+      - (io.Writer).Write
+
 linters:
   disable-all: true
   enable:

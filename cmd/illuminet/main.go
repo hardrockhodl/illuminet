@@ -108,7 +108,7 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 // runCollect is a placeholder for the collection pipeline command. It
 // reports that the functionality is not yet available and exits non
 // zero so scripts notice.
-func runCollect(args []string, stdout, stderr io.Writer) int {
+func runCollect(args []string, _, stderr io.Writer) int {
 	fs := flag.NewFlagSet("illuminet collect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	if err := fs.Parse(args); err != nil {
