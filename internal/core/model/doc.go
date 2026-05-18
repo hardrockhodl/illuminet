@@ -1,29 +1,31 @@
 // Package model defines the normalized, vendor-agnostic domain model
 // used throughout IllumiNET.
 //
-// The eventual surface of this package is expected to include the
-// following types:
+// The model is intentionally a "rich union": it carries every counter
+// and attribute that any supported vendor can plausibly expose, even
+// when only one platform reports a given field today. Adapters in
+// internal/adapter populate the fields they can derive and leave the
+// rest at the zero value. This is what separates IllumiNET from a
+// generic Telegraf/gNMI configuration.
 //
-//   - Device: a single switch or router, identified by a stable
-//     management address and platform metadata (vendor, OS family, OS
-//     version, serial number).
-//   - Interface: a physical or logical port on a Device, with operational
-//     state, speed, MTU, and link-layer counters.
-//   - Queue: a per-interface egress or ingress queue, holding QoS
-//     metadata and drop counters.
-//   - BufferInstance: a shared or dedicated buffer pool snapshot, sized
-//     in cells or bytes depending on platform.
-//   - PFCCounter: per-priority-class Priority Flow Control pause counters,
-//     captured as a pair (RX pauses received, TX pauses generated) so
-//     that the asymmetric ingress vs. egress signal can be analyzed.
-//   - ECNCounter: per-queue Explicit Congestion Notification marking
-//     counters.
-//   - BurstEvent: a peak-time annotated record of a transient utilization
-//     spike, including the timestamp at which the peak was observed.
+// Conventions:
 //
-// All values in this package are intended to be vendor agnostic. Vendor
-// adapters in internal/adapter are responsible for mapping platform
-// specific telemetry into these types.
+//   - Optional numeric fields (counters, gauges, percentages) are
+//     pointer types. A nil pointer means "not reported by this vendor
+//     on this platform"; that is semantically distinct from a reported
+//     zero. Consumers MUST treat nil and zero differently.
+//   - Optional string fields are plain strings; an empty string means
+//     "not reported". Pointer-to-string is only used when an empty
+//     string itself is a meaningful value, which is not the case in
+//     this package today.
+//   - Timestamps are time.Time. A zero time.Time (IsZero) means "not
+//     reported".
+//   - Samples are immutable snapshots. The model exposes no Update or
+//     delta methods; the pipeline computes deltas across successive
+//     samples, never inside a sample.
+//   - Interface and platform identifiers are kept in their original
+//     vendor-specific form. The model does not attempt to canonicalize
+//     "Ethernet1/1" against "ge-0/0/0"; downstream enrichment may.
 //
-// No types are implemented in this initial scaffold.
+// This package depends only on the Go standard library.
 package model
