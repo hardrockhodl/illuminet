@@ -20,6 +20,7 @@ import (
 
 	"github.com/hardrockhodl/illuminet/internal/adapter"
 	"github.com/hardrockhodl/illuminet/internal/adapter/fake"
+	"github.com/hardrockhodl/illuminet/internal/adapter/nxos"
 	"github.com/hardrockhodl/illuminet/internal/core/pipeline"
 	"github.com/hardrockhodl/illuminet/internal/exporter"
 	"github.com/hardrockhodl/illuminet/internal/exporter/influx"
@@ -115,10 +116,17 @@ func runCollect(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("illuminet collect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	adapterName := fs.String("adapter", "fake", `adapter to start (currently only "fake")`)
+	adapterName := fs.String("adapter", "fake", `adapter to start ("fake" or "nxos")`)
 	interval := fs.Duration("interval", 5*time.Second, "poll interval for polling adapters")
 	exporterName := fs.String("exporter", "stdout", `exporter to use (stdout = InfluxDB Line Protocol)`)
 	logLevel := fs.String("log-level", "info", "slog level: debug, info, warn, error")
+
+	target := fs.String("target", "", "gNMI target host:port (required with --adapter=nxos)")
+	username := fs.String("username", "", "gNMI username (required with --adapter=nxos)")
+	password := fs.String("password", "", "gNMI password; falls back to ILLUMINET_PASSWORD env var")
+	insecure := fs.Bool("insecure", false, "disable TLS for gNMI (lab use only)")
+	skipVerify := fs.Bool("skip-verify", false, "skip TLS certificate verification (lab use only)")
+	location := fs.String("location", "", "operator-supplied location tag")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -131,7 +139,20 @@ func runCollect(args []string, stdout, stderr io.Writer) int {
 	}
 	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
 
-	src, code := buildAdapter(*adapterName, *interval, logger, stderr)
+	if *password == "" {
+		*password = os.Getenv("ILLUMINET_PASSWORD")
+	}
+
+	src, code := buildAdapter(adapterParams{
+		name:       *adapterName,
+		interval:   *interval,
+		target:     *target,
+		username:   *username,
+		password:   *password,
+		insecure:   *insecure,
+		skipVerify: *skipVerify,
+		location:   *location,
+	}, logger, stderr)
 	if code != 0 {
 		return code
 	}
@@ -165,12 +186,42 @@ func runCollect(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func buildAdapter(name string, interval time.Duration, logger *slog.Logger, stderr io.Writer) (adapter.Adapter, int) {
-	switch name {
+type adapterParams struct {
+	name       string
+	interval   time.Duration
+	target     string
+	username   string
+	password   string
+	insecure   bool
+	skipVerify bool
+	location   string
+}
+
+func buildAdapter(p adapterParams, logger *slog.Logger, stderr io.Writer) (adapter.Adapter, int) {
+	switch p.name {
 	case "fake":
-		return fake.New(interval, logger), 0
+		return fake.New(p.interval, logger), 0
+	case "nxos":
+		if p.target == "" || p.username == "" {
+			fmt.Fprintln(stderr, "illuminet collect: --adapter=nxos requires --target and --username (and --password or ILLUMINET_PASSWORD)")
+			return nil, 2
+		}
+		a, err := nxos.New(nxos.Config{
+			Address:    p.target,
+			Username:   p.username,
+			Password:   p.password,
+			Insecure:   p.insecure,
+			SkipVerify: p.skipVerify,
+			Interval:   p.interval,
+			Location:   p.location,
+		}, logger)
+		if err != nil {
+			fmt.Fprintf(stderr, "illuminet collect: %v\n", err)
+			return nil, 2
+		}
+		return a, 0
 	default:
-		fmt.Fprintf(stderr, "illuminet collect: unknown adapter %q\n", name)
+		fmt.Fprintf(stderr, "illuminet collect: unknown adapter %q\n", p.name)
 		return nil, 2
 	}
 }
