@@ -1,0 +1,22 @@
+# Binaries built in the repository root or bin/.
+/illuminet
+/bin/
+/dist/
+
+# Test binaries and coverage artifacts.
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Vendor directory if a future iteration vendors dependencies.
+/vendor/
+
+# Editor and OS metadata.
+.DS_Store
+.idea/
+
+# VS Code workspace files. Keep the recommended-extensions list so the
+# project can suggest extensions to new contributors.
+.vscode/*
+!.vscode/extensions.json

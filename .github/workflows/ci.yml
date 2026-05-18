@@ -1,0 +1,116 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+
+  test:
+    name: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.23", "1.24"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Test
+        run: go test ./... -race -coverprofile coverage.out
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Derive build metadata
+        id: meta
+        shell: bash
+        run: |
+          VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+          COMMIT="$(git rev-parse --short HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "date=${DATE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${GOOS}" = "windows" ]; then EXT=".exe"; fi
+          OUT="dist/illuminet-${GOOS}-${GOARCH}${EXT}"
+          mkdir -p dist
+          go build \
+            -trimpath \
+            -ldflags "-s -w \
+              -X github.com/hardrockhodl/illuminet/pkg/version.Version=${{ steps.meta.outputs.version }} \
+              -X github.com/hardrockhodl/illuminet/pkg/version.Commit=${{ steps.meta.outputs.commit }} \
+              -X github.com/hardrockhodl/illuminet/pkg/version.Date=${{ steps.meta.outputs.date }}" \
+            -o "${OUT}" \
+            ./cmd/illuminet
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: illuminet-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
