@@ -1,16 +1,28 @@
 // Command illuminet is the entry point for the IllumiNET collector binary.
 //
-// The first iteration is intentionally a thin skeleton. It accepts two
-// subcommands, "version" and "collect", and a small set of global flags
-// for verbosity. No telemetry collection is performed yet.
+// The binary accepts two subcommands, "version" and "collect", plus a
+// small set of global flags. The "collect" subcommand runs the
+// configured adapter through the pipeline and writes the configured
+// exporter's output to stdout.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
+	"github.com/hardrockhodl/illuminet/internal/adapter"
+	"github.com/hardrockhodl/illuminet/internal/adapter/fake"
+	"github.com/hardrockhodl/illuminet/internal/core/pipeline"
+	"github.com/hardrockhodl/illuminet/internal/exporter"
+	"github.com/hardrockhodl/illuminet/internal/exporter/influx"
 	"github.com/hardrockhodl/illuminet/pkg/version"
 )
 
@@ -21,7 +33,7 @@ Usage:
 
 Commands:
   version   Print build identification (version, commit, build date).
-  collect   Start the collection pipeline (not yet implemented).
+  collect   Start the collection pipeline.
 
 Global flags:
   -v        Verbose output (info level).
@@ -47,12 +59,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if err := fs.Parse(args); err != nil {
-		// flag already wrote the error and usage to stderr.
 		return 2
 	}
 
-	// Resolve the verbosity level. The verbosity is wired into a logger
-	// in a later iteration; for now we only retain the resolved level.
 	level := resolveVerbosity(v, vv, vvv)
 	_ = level
 
@@ -78,8 +87,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// resolveVerbosity returns the effective verbosity level. Higher
-// numbers indicate more verbose output. The highest flag wins.
 func resolveVerbosity(v, vv, vvv bool) int {
 	switch {
 	case vvv:
@@ -93,7 +100,6 @@ func resolveVerbosity(v, vv, vvv bool) int {
 	}
 }
 
-// runVersion prints build identification produced by the linker.
 func runVersion(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("illuminet version", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -105,17 +111,93 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runCollect is a placeholder for the collection pipeline command. It
-// reports that the functionality is not yet available and exits non
-// zero so scripts notice.
-func runCollect(args []string, _, stderr io.Writer) int {
+func runCollect(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("illuminet collect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+
+	adapterName := fs.String("adapter", "fake", `adapter to start (currently only "fake")`)
+	interval := fs.Duration("interval", 5*time.Second, "poll interval for polling adapters")
+	exporterName := fs.String("exporter", "stdout", `exporter to use (stdout = InfluxDB Line Protocol)`)
+	logLevel := fs.String("log-level", "info", "slog level: debug, info, warn, error")
+
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	fmt.Fprintln(stderr, "illuminet collect: not yet implemented")
-	return 1
+
+	level, err := parseLogLevel(*logLevel)
+	if err != nil {
+		fmt.Fprintf(stderr, "illuminet collect: %v\n", err)
+		return 2
+	}
+	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
+
+	src, code := buildAdapter(*adapterName, *interval, logger, stderr)
+	if code != 0 {
+		return code
+	}
+	sink, code := buildExporter(*exporterName, stdout, stderr)
+	if code != 0 {
+		return code
+	}
+
+	p, err := pipeline.New(pipeline.Options{
+		Adapters:  []adapter.Adapter{src},
+		Exporters: []exporter.Exporter{sink},
+		Logger:    logger,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "illuminet collect: %v\n", err)
+		return 1
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logger.Info("starting collector",
+		"adapter", *adapterName,
+		"exporter", *exporterName,
+		"interval", *interval)
+
+	if err := p.Run(ctx); err != nil {
+		fmt.Fprintf(stderr, "illuminet collect: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func buildAdapter(name string, interval time.Duration, logger *slog.Logger, stderr io.Writer) (adapter.Adapter, int) {
+	switch name {
+	case "fake":
+		return fake.New(interval, logger), 0
+	default:
+		fmt.Fprintf(stderr, "illuminet collect: unknown adapter %q\n", name)
+		return nil, 2
+	}
+}
+
+func buildExporter(name string, stdout, stderr io.Writer) (exporter.Exporter, int) {
+	switch name {
+	case "stdout":
+		return influx.New(stdout), 0
+	default:
+		fmt.Fprintf(stderr, "illuminet collect: unknown exporter %q\n", name)
+		return nil, 2
+	}
+}
+
+func parseLogLevel(s string) (slog.Level, error) {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("unknown log level %q (want debug|info|warn|error)", s)
+	}
 }
 
 func main() {

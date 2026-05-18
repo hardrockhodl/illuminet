@@ -1,18 +1,22 @@
 // Package pipeline orchestrates the IllumiNET collection loop.
 //
-// Responsibilities of this package, once implemented, will include:
+// A [Pipeline] fans Sample data out from one or more Adapters to one
+// or more Exporters. Adapters run in their own goroutines and push
+// onto a buffered channel; a central dispatcher reads the channel and
+// invokes Export on each configured exporter sequentially. A failing
+// exporter logs and is skipped; it does not block siblings.
 //
-//   - Driving the lifecycle of vendor adapters (start, stop, reconnect,
-//     backoff) and consuming the streams of normalized samples they
-//     produce.
-//   - Correlation of per-interface, per-queue, and per-buffer counters
-//     across telemetry sources and time windows.
-//   - Enrichment of samples with topology context derived from LLDP, and
-//     classification of neighbors (host, switch, other) including the
-//     Core vs. Edge port split that paregupt's nexus_traffic_monitor
-//     established as a useful operational view.
-//   - Dispatching enriched samples to the configured exporters in
-//     internal/exporter.
+// On context cancellation the pipeline waits up to a few seconds for
+// adapters to drain, then closes its exporters. The exit ordering is:
 //
-// No collection logic is implemented in this initial scaffold.
+//  1. Context cancellation propagates to all adapters.
+//  2. Adapter goroutines return; their Run errors are collected.
+//  3. The sample channel is closed and the dispatcher drains.
+//  4. Each exporter's Close is invoked.
+//
+// Future iterations will add enrichment stages (LLDP-driven peer
+// classification, port-role inference) between the channel reader and
+// the exporter dispatch loop. The current shape is intentionally
+// minimal so the contract between adapter, pipeline and exporter is
+// easy to reason about.
 package pipeline
