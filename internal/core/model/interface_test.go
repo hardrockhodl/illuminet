@@ -113,6 +113,7 @@ func TestPortClassification_String(t *testing.T) {
 		{PortClassificationCore, "core"},
 		{PortClassificationEdge, "edge"},
 		{PortClassificationManagement, "management"},
+		{PortClassificationOther, "other"},
 	}
 
 	for _, tc := range tests {

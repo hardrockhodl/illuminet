@@ -27,6 +27,12 @@ const (
 	// populate Device.Model.
 	PathComponents = "/components/component[name=*]/state"
 
+	// PathLLDPNeighbors returns LLDP neighbor state per interface.
+	// Each neighbor advertises system-name, system-description,
+	// management-address, port-id, chassis-id and system-capabilities
+	// at minimum. NX-OS supports openconfig-lldp from 10.4+.
+	PathLLDPNeighbors = "/lldp/interfaces/interface[name=*]/neighbors/neighbor[id=*]/state"
+
 	// PathQoSQueueState returns operational queue state per interface,
 	// including transmit and drop counters and ECN marked packets.
 	//

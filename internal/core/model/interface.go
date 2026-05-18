@@ -108,6 +108,11 @@ const (
 	// PortClassificationManagement indicates a port used for
 	// out-of-band management rather than data plane.
 	PortClassificationManagement PortClassification = "management"
+	// PortClassificationOther covers ports whose peer is reachable
+	// but does not advertise any LLDP capability (no router, bridge,
+	// or station), e.g. some firewalls, load balancers, or
+	// passive optical equipment.
+	PortClassificationOther PortClassification = "other"
 )
 
 // String returns the human-readable port classification. The zero

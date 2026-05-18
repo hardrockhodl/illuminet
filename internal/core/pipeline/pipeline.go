@@ -17,10 +17,12 @@ const (
 	shutdownDrainTimeout = 5 * time.Second
 )
 
-// Pipeline runs adapters and dispatches their samples to exporters.
+// Pipeline runs adapters, transforms their samples through a
+// configured chain of Stages, and dispatches the result to exporters.
 // It is safe to construct one Pipeline per process and call Run once.
 type Pipeline struct {
 	adapters  []adapter.Adapter
+	stages    []Stage
 	exporters []exporter.Exporter
 	logger    *slog.Logger
 	buffer    int
@@ -28,16 +30,19 @@ type Pipeline struct {
 
 // Options configures a Pipeline. A zero or negative Buffer is replaced
 // by the package default (64). A nil Logger is replaced by
-// slog.Default.
+// slog.Default. An empty Stages slice is valid and produces the
+// pre-stages behavior: samples flow straight from adapters to
+// exporters.
 type Options struct {
 	Adapters  []adapter.Adapter
+	Stages    []Stage
 	Exporters []exporter.Exporter
 	Logger    *slog.Logger
 	Buffer    int
 }
 
 // New constructs a Pipeline from Options. It returns an error when no
-// adapter or no exporter is configured.
+// adapter or no exporter is configured. Stages may be omitted.
 func New(opts Options) (*Pipeline, error) {
 	if len(opts.Adapters) == 0 {
 		return nil, errors.New("pipeline: at least one adapter required")
@@ -55,6 +60,7 @@ func New(opts Options) (*Pipeline, error) {
 	}
 	return &Pipeline{
 		adapters:  opts.Adapters,
+		stages:    opts.Stages,
 		exporters: opts.Exporters,
 		logger:    logger,
 		buffer:    buf,
@@ -93,6 +99,14 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		// the sample channel closes.
 		exportCtx := context.Background()
 		for s := range samples {
+			for _, stage := range p.stages {
+				if err := stage.Process(exportCtx, s); err != nil {
+					p.logger.Warn("stage failed",
+						"stage", stage.Name(),
+						"device", s.Device.Name,
+						"error", err)
+				}
+			}
 			for _, exp := range p.exporters {
 				if err := exp.Export(exportCtx, s); err != nil {
 					p.logger.Error("export failed", "error", err)

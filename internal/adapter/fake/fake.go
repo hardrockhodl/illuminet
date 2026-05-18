@@ -148,17 +148,21 @@ func (f *fake) buildSample(now time.Time, cpuKernel, cpuUser float64) *model.Sam
 		},
 		Interfaces: []model.Interface{
 			{
-				Name:           "Ethernet1/1",
-				Description:    "host-facing edge port",
-				AdminState:     model.AdminStateUp,
-				OperState:      model.OperStateUp,
-				OperMode:       model.OperModeAccess,
-				Classification: model.PortClassificationEdge,
-				OperSpeed:      &speed25G,
+				Name:        "Ethernet1/1",
+				Description: "host-facing edge port",
+				AdminState:  model.AdminStateUp,
+				OperState:   model.OperStateUp,
+				OperMode:    model.OperModeAccess,
+				// Classification left Unknown; PortClassificationStage
+				// derives it from Peer.Type. Peer.Type itself comes from
+				// PeerClassificationStage acting on the LLDP fields
+				// below.
+				OperSpeed: &speed25G,
 				Peer: &model.Peer{
-					Name:       "server-001",
-					Type:       model.PeerTypeHost,
-					LearnedVia: "lldp",
+					Name:              "server-001",
+					LearnedVia:        "lldp",
+					Capabilities:      []string{"station"},
+					SystemDescription: "Ubuntu Server 22.04 LTS",
 				},
 				Counters: &model.InterfaceCounters{
 					RxBytes: &eth1Rx,
@@ -173,17 +177,17 @@ func (f *fake) buildSample(now time.Time, cpuKernel, cpuUser float64) *model.Sam
 				ObservedAt: now,
 			},
 			{
-				Name:           "Ethernet1/49",
-				Description:    "fabric uplink",
-				AdminState:     model.AdminStateUp,
-				OperState:      model.OperStateUp,
-				OperMode:       model.OperModeRouted,
-				Classification: model.PortClassificationCore,
-				OperSpeed:      &speed100G,
+				Name:        "Ethernet1/49",
+				Description: "fabric uplink",
+				AdminState:  model.AdminStateUp,
+				OperState:   model.OperStateUp,
+				OperMode:    model.OperModeRouted,
+				OperSpeed:   &speed100G,
 				Peer: &model.Peer{
-					Name:       "spine-1",
-					Type:       model.PeerTypeSwitch,
-					LearnedVia: "lldp",
+					Name:              "spine-1",
+					LearnedVia:        "lldp",
+					Capabilities:      []string{"router", "bridge"},
+					SystemDescription: "Cisco Nexus 9000 N9K-C9332D-GX2B NX-OS 10.5(1)",
 				},
 				Counters: &model.InterfaceCounters{
 					RxBytes: &eth49Rx,

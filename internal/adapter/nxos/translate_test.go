@@ -1,6 +1,7 @@
 package nxos
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -398,6 +399,94 @@ func TestTranslate_QueueOnUnknownInterface(t *testing.T) {
 	}
 	if len(iface.Queues) != 1 {
 		t.Fatalf("expected 1 queue, got %d", len(iface.Queues))
+	}
+}
+
+func TestTranslate_LLDPNeighbor(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	notifs := []*gnmi.Notification{
+		sampleLLDPNeighbor("Ethernet1/1", "0",
+			"spine-1", "Cisco Nexus 9000 N9K-C9332D-GX2B NX-OS 10.5(1)",
+			[]string{"router", "bridge"}, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface, got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Peer == nil {
+		t.Fatal("Peer: got nil")
+	}
+	if iface.Peer.Name != "spine-1" {
+		t.Errorf("Peer.Name: got %q, want spine-1", iface.Peer.Name)
+	}
+	if !strings.Contains(iface.Peer.SystemDescription, "NX-OS") {
+		t.Errorf("Peer.SystemDescription: got %q", iface.Peer.SystemDescription)
+	}
+	if iface.Peer.LearnedVia != "lldp" {
+		t.Errorf("Peer.LearnedVia: got %q, want lldp", iface.Peer.LearnedVia)
+	}
+	if iface.Peer.Type != model.PeerTypeUnknown {
+		t.Errorf("Peer.Type: got %q, want Unknown (classification is a pipeline stage)", iface.Peer.Type)
+	}
+	wantCaps := []string{"router", "bridge"}
+	if len(iface.Peer.Capabilities) != 2 ||
+		iface.Peer.Capabilities[0] != wantCaps[0] ||
+		iface.Peer.Capabilities[1] != wantCaps[1] {
+		t.Errorf("Peer.Capabilities: got %v, want %v", iface.Peer.Capabilities, wantCaps)
+	}
+}
+
+func TestTranslate_LLDPMergedWithInterfaceCounters(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	notifs := []*gnmi.Notification{
+		sampleInterfaceCounters("Ethernet1/1", 1024, 2048, ts),
+		sampleLLDPNeighbor("Ethernet1/1", "0", "spine-1", "Cisco N9K",
+			[]string{"router"}, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface (lldp + counters should merge), got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Counters == nil || iface.Counters.RxBytes == nil || *iface.Counters.RxBytes != 1024 {
+		t.Errorf("Counters.RxBytes: got %+v, want 1024", iface.Counters)
+	}
+	if iface.Peer == nil || iface.Peer.Name != "spine-1" {
+		t.Errorf("Peer: got %+v, want Name=spine-1", iface.Peer)
+	}
+}
+
+func TestTranslate_LLDPPortIDOverridesChassisID(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	notifs := []*gnmi.Notification{
+		{
+			Timestamp: ts.UnixNano(),
+			Update: []*gnmi.Update{
+				{Path: lldpNeighborPath("Ethernet1/1", "0", "system-name"), Val: stringTV("spine-1")},
+				{Path: lldpNeighborPath("Ethernet1/1", "0", "chassis-id"), Val: stringTV("aa:bb:cc:dd:ee:ff")},
+				{Path: lldpNeighborPath("Ethernet1/1", "0", "port-id"), Val: stringTV("Ethernet1/2")},
+			},
+		},
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if got := s.Interfaces[0].Peer.Interface; got != "Ethernet1/2" {
+		t.Errorf("Peer.Interface: got %q, want Ethernet1/2 (port-id should win over chassis-id)", got)
 	}
 }
 

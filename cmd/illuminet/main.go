@@ -22,6 +22,7 @@ import (
 	"github.com/hardrockhodl/illuminet/internal/adapter/fake"
 	"github.com/hardrockhodl/illuminet/internal/adapter/nxos"
 	"github.com/hardrockhodl/illuminet/internal/core/pipeline"
+	"github.com/hardrockhodl/illuminet/internal/core/pipeline/stages"
 	"github.com/hardrockhodl/illuminet/internal/exporter"
 	"github.com/hardrockhodl/illuminet/internal/exporter/influx"
 	"github.com/hardrockhodl/illuminet/pkg/version"
@@ -161,8 +162,18 @@ func runCollect(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 
+	stageList := []pipeline.Stage{
+		stages.NewPeerClassification(logger),
+		stages.NewPortClassification(logger),
+	}
+	stageNames := make([]string, len(stageList))
+	for i, s := range stageList {
+		stageNames[i] = s.Name()
+	}
+
 	p, err := pipeline.New(pipeline.Options{
 		Adapters:  []adapter.Adapter{src},
+		Stages:    stageList,
 		Exporters: []exporter.Exporter{sink},
 		Logger:    logger,
 	})
@@ -178,6 +189,7 @@ func runCollect(args []string, stdout, stderr io.Writer) int {
 		"adapter", *adapterName,
 		"exporter", *exporterName,
 		"interval", *interval)
+	logger.Info("pipeline stages active", "stages", stageNames)
 
 	if err := p.Run(ctx); err != nil {
 		fmt.Fprintf(stderr, "illuminet collect: %v\n", err)

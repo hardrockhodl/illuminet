@@ -44,11 +44,27 @@ type Peer struct {
 	// Empty when not advertised.
 	MgmtIP string
 
-	// Type classifies the neighbor.
+	// Type classifies the neighbor. Adapters typically leave this at
+	// PeerTypeUnknown; downstream pipeline stages derive Type from
+	// Capabilities and SystemDescription.
 	Type PeerType
 
 	// LearnedVia names the discovery protocol that produced this Peer
 	// record. Currently always "lldp"; reserved for CDP or other
 	// sources in the future.
 	LearnedVia string
+
+	// Capabilities lists the LLDP system capabilities advertised by
+	// the peer ("router", "bridge", "station", "wlan-access-point",
+	// etc.). Empty when the peer did not advertise capabilities or
+	// was discovered through a protocol that does not carry them.
+	// Used by classification stages downstream.
+	Capabilities []string
+
+	// SystemDescription is the LLDP system-description string. Used
+	// by classification stages to disambiguate hosts from switches
+	// when capabilities alone are insufficient (e.g. Linux servers
+	// that advertise bridge/router capability because of container
+	// networking).
+	SystemDescription string
 }

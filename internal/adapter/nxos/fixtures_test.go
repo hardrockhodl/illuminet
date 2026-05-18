@@ -113,6 +113,53 @@ func sampleQueueECN(intfName, queueName string, marked uint64, ts time.Time) *gn
 	}
 }
 
+// lldpNeighborPath returns the absolute path to a leaf under one LLDP
+// neighbor's state container.
+func lldpNeighborPath(intfName, neighborID string, leaves ...string) *gnmi.Path {
+	elems := []*gnmi.PathElem{
+		{Name: "lldp"},
+		{Name: "interfaces"},
+		{Name: "interface", Key: map[string]string{"name": intfName}},
+		{Name: "neighbors"},
+		{Name: "neighbor", Key: map[string]string{"id": neighborID}},
+		{Name: "state"},
+	}
+	for _, l := range leaves {
+		elems = append(elems, &gnmi.PathElem{Name: l})
+	}
+	return &gnmi.Path{Elem: elems}
+}
+
+func stringListTV(values ...string) *gnmi.TypedValue {
+	elems := make([]*gnmi.TypedValue, len(values))
+	for i, v := range values {
+		elems[i] = &gnmi.TypedValue{Value: &gnmi.TypedValue_StringVal{StringVal: v}}
+	}
+	return &gnmi.TypedValue{
+		Value: &gnmi.TypedValue_LeaflistVal{LeaflistVal: &gnmi.ScalarArray{Element: elems}},
+	}
+}
+
+// sampleLLDPNeighbor builds a Notification carrying LLDP neighbor
+// state for one neighbor on one interface. Mgmt IP is omitted from the
+// builder for brevity; tests that need it add the leaf separately.
+func sampleLLDPNeighbor(intfName, neighborID, sysName, sysDesc string,
+	capabilities []string,
+	ts time.Time,
+) *gnmi.Notification {
+	updates := []*gnmi.Update{
+		{Path: lldpNeighborPath(intfName, neighborID, "system-name"), Val: stringTV(sysName)},
+		{Path: lldpNeighborPath(intfName, neighborID, "system-description"), Val: stringTV(sysDesc)},
+	}
+	if capabilities != nil {
+		updates = append(updates, &gnmi.Update{
+			Path: lldpNeighborPath(intfName, neighborID, "system-capabilities"),
+			Val:  stringListTV(capabilities...),
+		})
+	}
+	return &gnmi.Notification{Timestamp: ts.UnixNano(), Update: updates}
+}
+
 // sampleSystemState builds a Notification carrying hostname and
 // software-version.
 func sampleSystemState(hostname, osVersion string, ts time.Time) *gnmi.Notification {

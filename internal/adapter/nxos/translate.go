@@ -110,6 +110,8 @@ func (t *translator) applyUpdate(elems []*gnmi.PathElem, val *gnmi.TypedValue, t
 		return t.applyInterfaces(elems[1:], val, ts)
 	case "qos":
 		return t.applyQoS(elems[1:], val, ts)
+	case "lldp":
+		return t.applyLLDP(elems[1:], val, ts)
 	case "system":
 		return t.applySystem(elems[1:], val)
 	default:
@@ -309,6 +311,101 @@ func (t *translator) applyQueueState(queue *model.Queue, elems []*gnmi.PathElem,
 	return nil
 }
 
+func (t *translator) applyLLDP(elems []*gnmi.PathElem, val *gnmi.TypedValue, ts int64) error {
+	if len(elems) == 0 || elems[0].GetName() != "interfaces" {
+		return nil
+	}
+	return t.applyLLDPInterfaces(elems[1:], val, ts)
+}
+
+func (t *translator) applyLLDPInterfaces(elems []*gnmi.PathElem, val *gnmi.TypedValue, ts int64) error {
+	if len(elems) == 0 || elems[0].GetName() != "interface" {
+		return nil
+	}
+	name, ok := interfaceNameFromElem(elems[0])
+	if !ok {
+		return nil
+	}
+	iface := t.getOrCreateInterface(name, ts)
+	return t.applyLLDPInterfaceContent(iface, elems[1:], val)
+}
+
+func (t *translator) applyLLDPInterfaceContent(iface *model.Interface, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "neighbors" {
+		return nil
+	}
+	return t.applyLLDPNeighbors(iface, elems[1:], val)
+}
+
+func (t *translator) applyLLDPNeighbors(iface *model.Interface, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "neighbor" {
+		return nil
+	}
+	if elems[0].GetKey()["id"] == "" {
+		return nil
+	}
+	if iface.Peer == nil {
+		iface.Peer = &model.Peer{LearnedVia: "lldp"}
+	}
+	return t.applyNeighborContent(iface.Peer, elems[1:], val)
+}
+
+func (t *translator) applyNeighborContent(peer *model.Peer, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "state" {
+		return nil
+	}
+	return t.applyNeighborState(peer, elems[1:], val)
+}
+
+func (t *translator) applyNeighborState(peer *model.Peer, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 {
+		return nil
+	}
+	switch elems[0].GetName() {
+	case "system-name":
+		s, err := stringVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp system-name: %w", err)
+		}
+		peer.Name = s
+	case "system-description":
+		s, err := stringVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp system-description: %w", err)
+		}
+		peer.SystemDescription = s
+	case "management-address":
+		s, err := stringVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp management-address: %w", err)
+		}
+		peer.MgmtIP = s
+	case "chassis-id":
+		s, err := stringVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp chassis-id: %w", err)
+		}
+		// chassis-id only fills Peer.Interface when port-id has not
+		// been seen yet; port-id is the preferred identifier.
+		if peer.Interface == "" {
+			peer.Interface = s
+		}
+	case "port-id":
+		s, err := stringVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp port-id: %w", err)
+		}
+		peer.Interface = s
+	case "system-capabilities":
+		caps, err := stringListVal(val)
+		if err != nil {
+			return fmt.Errorf("lldp system-capabilities: %w", err)
+		}
+		peer.Capabilities = caps
+	}
+	return nil
+}
+
 // interfaceNameFromElem extracts the interface name from a PathElem's
 // key map. OpenConfig uses "name" under /interfaces/interface but
 // "interface-id" under /qos/interfaces/interface. The value is the
@@ -418,5 +515,29 @@ func stringVal(v *gnmi.TypedValue) (string, error) {
 		return x.AsciiVal, nil
 	default:
 		return "", fmt.Errorf("expected string TypedValue, got %T", x)
+	}
+}
+
+// stringListVal extracts a list of strings from a gNMI leaflist
+// TypedValue. Used for fields like LLDP system-capabilities that YANG
+// models as a leaf-list.
+func stringListVal(v *gnmi.TypedValue) ([]string, error) {
+	if v == nil {
+		return nil, errors.New("nil TypedValue")
+	}
+	switch x := v.GetValue().(type) {
+	case *gnmi.TypedValue_LeaflistVal:
+		elems := x.LeaflistVal.GetElement()
+		out := make([]string, 0, len(elems))
+		for _, el := range elems {
+			ev, ok := el.GetValue().(*gnmi.TypedValue_StringVal)
+			if !ok {
+				return nil, fmt.Errorf("expected string element in leaflist, got %T", el.GetValue())
+			}
+			out = append(out, ev.StringVal)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected leaflist TypedValue, got %T", x)
 	}
 }

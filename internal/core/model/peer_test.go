@@ -20,6 +20,12 @@ func TestPeer_ZeroValue(t *testing.T) {
 	if p.LearnedVia != "" {
 		t.Errorf("LearnedVia: got %q, want empty", p.LearnedVia)
 	}
+	if p.Capabilities != nil {
+		t.Errorf("Capabilities: got %v, want nil", p.Capabilities)
+	}
+	if p.SystemDescription != "" {
+		t.Errorf("SystemDescription: got %q, want empty", p.SystemDescription)
+	}
 }
 
 func TestPeerType_String(t *testing.T) {
