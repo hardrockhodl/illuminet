@@ -1,38 +1,47 @@
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 output:
   formats:
-    - format: colored-line-number
-
-issues:
-  exclude-dirs:
-    - vendor
-  exclude-files:
-    - ".*\\.gen\\.go$"
-    - ".*_generated\\.go$"
-  exclude-use-default: false
-
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
-      - (io.Writer).Write
-
+    text:
+      path: stdout
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
-    - gosimple
+    - gocritic
     - govet
     - ineffassign
-    - staticcheck
-    - unused
-    - gofmt
-    - goimports
     - misspell
     - revive
-    - gocritic
+    - staticcheck
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Writer).Write
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.gen\.go$
+      - .*_generated\.go$
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.gen\.go$
+      - .*_generated\.go$
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$

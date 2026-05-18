@@ -189,14 +189,14 @@ func TestTranslate_MissingFieldsStayNil(t *testing.T) {
 func TestTranslate_LastClearParsesRFC3339(t *testing.T) {
 	ts := time.Unix(1700000000, 0)
 	devCtx := DeviceContext{Name: "leaf-01"}
-	clear := "2026-05-18T11:00:00Z"
+	clearedAt := "2026-05-18T11:00:00Z"
 
 	notifs := []*gnmi.Notification{
 		{
 			Timestamp: ts.UnixNano(),
 			Update: []*gnmi.Update{
 				{Path: ifacePath("Ethernet1/1", "counters", "in-octets"), Val: uintTV(1)},
-				{Path: ifacePath("Ethernet1/1", "counters", "last-clear"), Val: stringTV(clear)},
+				{Path: ifacePath("Ethernet1/1", "counters", "last-clear"), Val: stringTV(clearedAt)},
 			},
 		},
 	}
@@ -208,7 +208,7 @@ func TestTranslate_LastClearParsesRFC3339(t *testing.T) {
 	if got == nil {
 		t.Fatal("LastClear: got nil")
 	}
-	want, _ := time.Parse(time.RFC3339, clear)
+	want, _ := time.Parse(time.RFC3339, clearedAt)
 	if !got.Equal(want) {
 		t.Errorf("LastClear: got %v, want %v", got, want)
 	}
@@ -219,15 +219,15 @@ func TestTranslate_AllInterfaceCounters(t *testing.T) {
 	devCtx := DeviceContext{Name: "leaf-01"}
 
 	leaves := map[string]uint64{
-		"in-octets":           100,
-		"out-octets":          200,
-		"in-unicast-pkts":     300,
-		"out-unicast-pkts":    400,
-		"in-multicast-pkts":   500,
-		"out-multicast-pkts":  600,
-		"in-broadcast-pkts":   700,
-		"out-broadcast-pkts":  800,
-		"in-crc-errors":       9,
+		"in-octets":          100,
+		"out-octets":         200,
+		"in-unicast-pkts":    300,
+		"out-unicast-pkts":   400,
+		"in-multicast-pkts":  500,
+		"out-multicast-pkts": 600,
+		"in-broadcast-pkts":  700,
+		"out-broadcast-pkts": 800,
+		"in-crc-errors":      9,
 	}
 
 	updates := make([]*gnmi.Update, 0, len(leaves))
