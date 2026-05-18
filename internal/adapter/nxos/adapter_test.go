@@ -182,6 +182,79 @@ func TestAdapter_DeliversSample(t *testing.T) {
 	}
 }
 
+func TestAdapter_DeliversQueueCounters(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	notifs := []*gnmi.Notification{
+		sampleSystemState("leaf-01", "10.5(1)", ts),
+		sampleInterfaceCounters("Ethernet1/1", 1024, 2048, ts),
+		sampleInterfaceState("Ethernet1/1", "UP", "UP", "uplink", ts),
+		sampleQueueCounters("Ethernet1/1", "QOS-GROUP-0", 100, 1000, 5, 128, ts),
+		sampleQueueECN("Ethernet1/1", "QOS-GROUP-0", 11, ts),
+	}
+
+	_, addr, stop := setupMockServer(t, notifs)
+	defer stop()
+
+	cfg := Config{
+		Address:  addr,
+		Username: "u",
+		Password: "p",
+		Insecure: true,
+		Interval: 80 * time.Millisecond,
+		Timeout:  500 * time.Millisecond,
+	}
+	a, err := New(cfg, discardLogger())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	out := make(chan *model.Sample, 4)
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx, out) }()
+
+	var s *model.Sample
+	select {
+	case s = <-out:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no sample received within timeout")
+	}
+
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface, got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Counters == nil || iface.Counters.RxBytes == nil || *iface.Counters.RxBytes != 1024 {
+		t.Errorf("interface RxBytes: got %+v, want 1024", iface.Counters)
+	}
+	if len(iface.Queues) != 1 {
+		t.Fatalf("expected 1 queue, got %d", len(iface.Queues))
+	}
+	q := iface.Queues[0]
+	if q.Name != "QOS-GROUP-0" {
+		t.Errorf("Queue.Name: got %q", q.Name)
+	}
+	if q.Counters.TxPkts == nil || *q.Counters.TxPkts != 100 {
+		t.Errorf("TxPkts: got %v, want 100", q.Counters.TxPkts)
+	}
+	if q.Counters.DropBytes == nil || *q.Counters.DropBytes != 128 {
+		t.Errorf("DropBytes: got %v, want 128", q.Counters.DropBytes)
+	}
+	if q.ECN == nil || q.ECN.MarkedPkts == nil || *q.ECN.MarkedPkts != 11 {
+		t.Errorf("ECN.MarkedPkts: got %+v, want 11", q.ECN)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("Run did not return after cancel")
+	}
+}
+
 func TestAdapter_ShutsDownPromptlyOnCancel(t *testing.T) {
 	_, addr, stop := setupMockServer(t, nil)
 	defer stop()

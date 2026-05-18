@@ -214,6 +214,193 @@ func TestTranslate_LastClearParsesRFC3339(t *testing.T) {
 	}
 }
 
+func TestTranslate_SingleQueue(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	notifs := []*gnmi.Notification{
+		sampleQueueCounters("Ethernet1/1", "QOS-GROUP-0", 10, 200, 3, 64, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface, got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Name != "Ethernet1/1" {
+		t.Errorf("Name: got %q", iface.Name)
+	}
+	if len(iface.Queues) != 1 {
+		t.Fatalf("expected 1 queue, got %d", len(iface.Queues))
+	}
+	q := iface.Queues[0]
+	if q.Name != "QOS-GROUP-0" {
+		t.Errorf("Queue.Name: got %q", q.Name)
+	}
+	if q.Counters.TxPkts == nil || *q.Counters.TxPkts != 10 {
+		t.Errorf("TxPkts: got %v, want 10", q.Counters.TxPkts)
+	}
+	if q.Counters.TxBytes == nil || *q.Counters.TxBytes != 200 {
+		t.Errorf("TxBytes: got %v, want 200", q.Counters.TxBytes)
+	}
+	if q.Counters.DropPkts == nil || *q.Counters.DropPkts != 3 {
+		t.Errorf("DropPkts: got %v, want 3", q.Counters.DropPkts)
+	}
+	if q.Counters.DropBytes == nil || *q.Counters.DropBytes != 64 {
+		t.Errorf("DropBytes: got %v, want 64", q.Counters.DropBytes)
+	}
+	if q.ECN != nil {
+		t.Errorf("ECN: got non-nil, want nil (no ECN data)")
+	}
+	if q.PFC != nil {
+		t.Errorf("PFC: got non-nil, want nil (not in this iteration)")
+	}
+}
+
+func TestTranslate_MultipleQueuesPerInterface(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	notifs := []*gnmi.Notification{
+		sampleQueueCounters("Ethernet1/1", "Q0", 100, 1000, 0, 0, ts),
+		sampleQueueCounters("Ethernet1/1", "Q3", 200, 2000, 1, 64, ts),
+		sampleQueueCounters("Ethernet1/1", "Q7", 50, 500, 0, 0, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface (not duplicated per queue), got %d", len(s.Interfaces))
+	}
+	queues := s.Interfaces[0].Queues
+	if len(queues) != 3 {
+		t.Fatalf("expected 3 queues, got %d", len(queues))
+	}
+	byName := map[string]model.Queue{}
+	for _, q := range queues {
+		byName[q.Name] = q
+	}
+	if q := byName["Q0"]; q.Counters.TxPkts == nil || *q.Counters.TxPkts != 100 {
+		t.Errorf("Q0.TxPkts: got %v, want 100", q.Counters.TxPkts)
+	}
+	if q := byName["Q3"]; q.Counters.DropPkts == nil || *q.Counters.DropPkts != 1 {
+		t.Errorf("Q3.DropPkts: got %v, want 1", q.Counters.DropPkts)
+	}
+	if q := byName["Q7"]; q.Counters.TxBytes == nil || *q.Counters.TxBytes != 500 {
+		t.Errorf("Q7.TxBytes: got %v, want 500", q.Counters.TxBytes)
+	}
+}
+
+func TestTranslate_QueueAndInterfaceCountersMerged(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	// /interfaces/interface[name=Ethernet1/1]/... AND
+	// /qos/interfaces/interface[interface-id=Ethernet1/1]/...
+	// must land on the same model.Interface.
+	notifs := []*gnmi.Notification{
+		sampleInterfaceCounters("Ethernet1/1", 1024, 2048, ts),
+		sampleQueueCounters("Ethernet1/1", "Q0", 10, 200, 0, 0, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface (interface-id should unify with name), got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Counters == nil {
+		t.Fatal("Counters: nil (interface-counter notification was dropped)")
+	}
+	if iface.Counters.RxBytes == nil || *iface.Counters.RxBytes != 1024 {
+		t.Errorf("RxBytes: got %v, want 1024", iface.Counters.RxBytes)
+	}
+	if len(iface.Queues) != 1 {
+		t.Fatalf("expected 1 queue, got %d", len(iface.Queues))
+	}
+	if iface.Queues[0].Counters.TxPkts == nil || *iface.Queues[0].Counters.TxPkts != 10 {
+		t.Errorf("Queue[0].TxPkts: got %v, want 10", iface.Queues[0].Counters.TxPkts)
+	}
+}
+
+func TestTranslate_ECNMarkedSeparateFromCounters(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	t.Run("ECN only", func(t *testing.T) {
+		notifs := []*gnmi.Notification{
+			sampleQueueECN("Ethernet1/1", "Q0", 42, ts),
+		}
+		s, err := Translate(devCtx, notifs)
+		if err != nil {
+			t.Fatalf("Translate: %v", err)
+		}
+		q := s.Interfaces[0].Queues[0]
+		if q.ECN == nil {
+			t.Fatal("ECN: nil")
+		}
+		if q.ECN.MarkedPkts == nil || *q.ECN.MarkedPkts != 42 {
+			t.Errorf("ECN.MarkedPkts: got %v, want 42", q.ECN.MarkedPkts)
+		}
+		if q.Counters.TxPkts != nil ||
+			q.Counters.TxBytes != nil ||
+			q.Counters.DropPkts != nil ||
+			q.Counters.DropBytes != nil {
+			t.Errorf("Counters: expected all nil when only ECN reported, got %+v", q.Counters)
+		}
+	})
+
+	t.Run("counters only", func(t *testing.T) {
+		notifs := []*gnmi.Notification{
+			sampleQueueCounters("Ethernet1/1", "Q0", 10, 200, 0, 0, ts),
+		}
+		s, err := Translate(devCtx, notifs)
+		if err != nil {
+			t.Fatalf("Translate: %v", err)
+		}
+		q := s.Interfaces[0].Queues[0]
+		if q.ECN != nil {
+			t.Errorf("ECN: got non-nil, want nil when no ECN reported")
+		}
+		if q.Counters.TxPkts == nil || *q.Counters.TxPkts != 10 {
+			t.Errorf("TxPkts: got %v, want 10", q.Counters.TxPkts)
+		}
+	})
+}
+
+func TestTranslate_QueueOnUnknownInterface(t *testing.T) {
+	ts := time.Unix(1700000000, 0)
+	devCtx := DeviceContext{Name: "leaf-01"}
+
+	// Queue notification arrives without a prior interface-counter
+	// notification; the interface must still be created so the queue
+	// has somewhere to live.
+	notifs := []*gnmi.Notification{
+		sampleQueueCounters("Ethernet1/2", "Q0", 5, 100, 0, 0, ts),
+	}
+	s, err := Translate(devCtx, notifs)
+	if err != nil {
+		t.Fatalf("Translate: %v", err)
+	}
+	if len(s.Interfaces) != 1 {
+		t.Fatalf("expected 1 interface, got %d", len(s.Interfaces))
+	}
+	iface := s.Interfaces[0]
+	if iface.Name != "Ethernet1/2" {
+		t.Errorf("Name: got %q", iface.Name)
+	}
+	if iface.Counters != nil {
+		t.Errorf("Counters: got non-nil, want nil (no interface counters reported)")
+	}
+	if len(iface.Queues) != 1 {
+		t.Fatalf("expected 1 queue, got %d", len(iface.Queues))
+	}
+}
+
 func TestTranslate_AllInterfaceCounters(t *testing.T) {
 	ts := time.Unix(1700000000, 0)
 	devCtx := DeviceContext{Name: "leaf-01"}

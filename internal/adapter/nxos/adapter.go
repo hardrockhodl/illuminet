@@ -69,6 +69,11 @@ func (a *Adapter) Run(ctx context.Context, out chan<- *model.Sample) error {
 			api.SampleInterval(a.cfg.Interval),
 		),
 		api.Subscription(
+			api.Path(PathQoSQueueState),
+			api.SubscriptionMode("sample"),
+			api.SampleInterval(a.cfg.Interval),
+		),
+		api.Subscription(
 			api.Path(PathSystem),
 			api.SubscriptionMode("sample"),
 			api.SampleInterval(a.cfg.Interval),

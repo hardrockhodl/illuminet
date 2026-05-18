@@ -26,4 +26,13 @@ const (
 	// PathComponents returns chassis and module information used to
 	// populate Device.Model.
 	PathComponents = "/components/component[name=*]/state"
+
+	// PathQoSQueueState returns operational queue state per interface,
+	// including transmit and drop counters and ECN marked packets.
+	//
+	// The /qos/interfaces/interface list uses interface-id as its key,
+	// not name like the /interfaces/interface list does. The key value
+	// is the same interface string on NX-OS; only the key name
+	// differs between the two YANG modules.
+	PathQoSQueueState = "/qos/interfaces/interface[interface-id=*]/output/queues/queue[name=*]/state"
 )

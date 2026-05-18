@@ -65,6 +65,54 @@ func sampleInterfaceState(ifaceName, admin, oper, desc string, ts time.Time) *gn
 	}
 }
 
+// queuePath returns the absolute path to a leaf under one queue's
+// state container, using the openconfig-qos list keys (interface-id
+// on /qos/interfaces/interface, name on /queues/queue).
+func queuePath(intfName, queueName string, leaves ...string) *gnmi.Path {
+	elems := []*gnmi.PathElem{
+		{Name: "qos"},
+		{Name: "interfaces"},
+		{Name: "interface", Key: map[string]string{"interface-id": intfName}},
+		{Name: "output"},
+		{Name: "queues"},
+		{Name: "queue", Key: map[string]string{"name": queueName}},
+		{Name: "state"},
+	}
+	for _, l := range leaves {
+		elems = append(elems, &gnmi.PathElem{Name: l})
+	}
+	return &gnmi.Path{Elem: elems}
+}
+
+// sampleQueueCounters builds a Notification carrying the four standard
+// queue counters (transmit-pkts, transmit-octets, dropped-pkts,
+// dropped-octets) for one queue under one interface.
+func sampleQueueCounters(intfName, queueName string,
+	txPkts, txOctets, droppedPkts, droppedOctets uint64,
+	ts time.Time,
+) *gnmi.Notification {
+	return &gnmi.Notification{
+		Timestamp: ts.UnixNano(),
+		Update: []*gnmi.Update{
+			{Path: queuePath(intfName, queueName, "transmit-pkts"), Val: uintTV(txPkts)},
+			{Path: queuePath(intfName, queueName, "transmit-octets"), Val: uintTV(txOctets)},
+			{Path: queuePath(intfName, queueName, "dropped-pkts"), Val: uintTV(droppedPkts)},
+			{Path: queuePath(intfName, queueName, "dropped-octets"), Val: uintTV(droppedOctets)},
+		},
+	}
+}
+
+// sampleQueueECN builds a Notification carrying ecn-marked-pkts for one
+// queue under one interface.
+func sampleQueueECN(intfName, queueName string, marked uint64, ts time.Time) *gnmi.Notification {
+	return &gnmi.Notification{
+		Timestamp: ts.UnixNano(),
+		Update: []*gnmi.Update{
+			{Path: queuePath(intfName, queueName, "ecn-marked-pkts"), Val: uintTV(marked)},
+		},
+	}
+}
+
 // sampleSystemState builds a Notification carrying hostname and
 // software-version.
 func sampleSystemState(hostname, osVersion string, ts time.Time) *gnmi.Notification {

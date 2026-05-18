@@ -108,6 +108,8 @@ func (t *translator) applyUpdate(elems []*gnmi.PathElem, val *gnmi.TypedValue, t
 	switch elems[0].GetName() {
 	case "interfaces":
 		return t.applyInterfaces(elems[1:], val, ts)
+	case "qos":
+		return t.applyQoS(elems[1:], val, ts)
 	case "system":
 		return t.applySystem(elems[1:], val)
 	default:
@@ -119,8 +121,8 @@ func (t *translator) applyInterfaces(elems []*gnmi.PathElem, val *gnmi.TypedValu
 	if len(elems) < 2 || elems[0].GetName() != "interface" {
 		return nil
 	}
-	name := elems[0].GetKey()["name"]
-	if name == "" {
+	name, ok := interfaceNameFromElem(elems[0])
+	if !ok {
 		return nil
 	}
 	iface := t.getOrCreateInterface(name, ts)
@@ -226,6 +228,114 @@ func (t *translator) applyCounter(iface *model.Interface, elems []*gnmi.PathElem
 		iface.Counters.RxCRC = &v
 	}
 	return nil
+}
+
+func (t *translator) applyQoS(elems []*gnmi.PathElem, val *gnmi.TypedValue, ts int64) error {
+	if len(elems) == 0 || elems[0].GetName() != "interfaces" {
+		return nil
+	}
+	return t.applyQoSInterfaces(elems[1:], val, ts)
+}
+
+func (t *translator) applyQoSInterfaces(elems []*gnmi.PathElem, val *gnmi.TypedValue, ts int64) error {
+	if len(elems) == 0 || elems[0].GetName() != "interface" {
+		return nil
+	}
+	name, ok := interfaceNameFromElem(elems[0])
+	if !ok {
+		return nil
+	}
+	iface := t.getOrCreateInterface(name, ts)
+	return t.applyQoSInterfaceContent(iface, elems[1:], val)
+}
+
+func (t *translator) applyQoSInterfaceContent(iface *model.Interface, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "output" {
+		return nil
+	}
+	return t.applyQoSOutput(iface, elems[1:], val)
+}
+
+func (t *translator) applyQoSOutput(iface *model.Interface, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "queues" {
+		return nil
+	}
+	return t.applyQoSQueues(iface, elems[1:], val)
+}
+
+func (t *translator) applyQoSQueues(iface *model.Interface, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "queue" {
+		return nil
+	}
+	name := elems[0].GetKey()["name"]
+	if name == "" {
+		return nil
+	}
+	queue := getOrCreateQueue(iface, name)
+	return t.applyQueueContent(queue, elems[1:], val)
+}
+
+func (t *translator) applyQueueContent(queue *model.Queue, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 || elems[0].GetName() != "state" {
+		return nil
+	}
+	return t.applyQueueState(queue, elems[1:], val)
+}
+
+func (t *translator) applyQueueState(queue *model.Queue, elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
+	if len(elems) == 0 {
+		return nil
+	}
+	name := elems[0].GetName()
+	v, err := uintVal(val)
+	if err != nil {
+		return fmt.Errorf("queue %s %s: %w", queue.Name, name, err)
+	}
+	switch name {
+	case "transmit-pkts":
+		queue.Counters.TxPkts = &v
+	case "transmit-octets":
+		queue.Counters.TxBytes = &v
+	case "dropped-pkts":
+		queue.Counters.DropPkts = &v
+	case "dropped-octets":
+		queue.Counters.DropBytes = &v
+	case "ecn-marked-pkts":
+		if queue.ECN == nil {
+			queue.ECN = &model.ECNCounter{}
+		}
+		queue.ECN.MarkedPkts = &v
+	}
+	return nil
+}
+
+// interfaceNameFromElem extracts the interface name from a PathElem's
+// key map. OpenConfig uses "name" under /interfaces/interface but
+// "interface-id" under /qos/interfaces/interface. The value is the
+// same interface string on NX-OS; only the key name differs.
+func interfaceNameFromElem(elem *gnmi.PathElem) (string, bool) {
+	if name, ok := elem.GetKey()["name"]; ok && name != "" {
+		return name, true
+	}
+	if id, ok := elem.GetKey()["interface-id"]; ok && id != "" {
+		return id, true
+	}
+	return "", false
+}
+
+// getOrCreateQueue returns a pointer to the Queue with the given name
+// in iface.Queues, appending a new zero-value Queue if no match
+// exists. The returned pointer is only valid until the next call that
+// might append to iface.Queues; Translate uses it within a single
+// notification application so this is safe.
+func getOrCreateQueue(iface *model.Interface, name string) *model.Queue {
+	for i := range iface.Queues {
+		if iface.Queues[i].Name == name {
+			return &iface.Queues[i]
+		}
+	}
+	iface.Queues = append(iface.Queues, model.Queue{Name: name})
+	return &iface.Queues[len(iface.Queues)-1]
 }
 
 func (t *translator) applySystem(elems []*gnmi.PathElem, val *gnmi.TypedValue) error {
